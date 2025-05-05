@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Insight Study Timer</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --accent-color: #4ade80;
+      --alert-color: #f43f5e;
+      --writing-color: #60a5fa;
+      --review-color: #f59e0b;
+      --bg-color: #0f172a;
+      --font-color: white;
+      --meditation-color: #a78bfa;
+      --grid-color: rgba(255,255,255,0.1);
+      --axis-color: rgba(255,255,255,0.3);
+      --label-color: rgba(255,255,255,0.6);
+      --date-color: #facc15;
+    }
+    body {
+      background-color: var(--bg-color);
+      color: var(--font-color);
+      font-family: 'Segoe UI', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 1rem;
+    }
+    .btn {
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 9999px;
+      font-size: 1rem;
+      cursor: pointer;
+      margin: 0.5rem;
+      transition: all 0.3s ease;
+    }
+    .start-btn { background-color: var(--accent-color); color: white; }
+    .start-btn:hover { background-color: #22c55e; }
+    .end-btn { background-color: var(--alert-color); color: white; margin-top: 1rem; }
+    .stats-btn { background-color: var(--writing-color); color: white; }
+    .meditation-btn { background-color: var(--meditation-color); color: white; }
+    .review-btn { background-color: var(--review-color); color: white; }
+    .pulse { animation: pulse 1s infinite; }
+    .bounce { animation: bounce 1s infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+    .timer {
+      font-size: 3rem;
+      margin-top: 1rem;
+    }
+    #history {
+      margin-top: 2rem;
+      max-height: 300px;
+      overflow-y: auto;
+      width: 90%;
+      max-width: 500px;
+    }
+    #history h3 {
+      color: #facc15;
+      margin-bottom: 0.5rem;
+    }
+    iframe {
+      display: none;
+    }
+    .debug {
+      position: fixed;
+      bottom: 5px;
+      right: 5px;
+      font-size: 10px;
+      color: #666;
+    }
+    .quote {
+      max-width: 80%;
+      text-align: center;
+      margin: 2rem auto;
+      font-size: 1.25rem;
+      font-style: italic;
+      color: #facc15;
+    }
+    .note {
+      font-size: 0.75rem;
+      opacity: 0.8;
+      margin-top: 0.25rem;
+    }
+    /* Responsive graph container */
+    #graphContainer {
+      width: 100%;
+      max-width: 100%;
+      aspect-ratio: 5 / 2;
+      position: relative;
+      background-color: rgba(15, 23, 42, 0.6);
+      border-radius: 8px;
+      padding: 10px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+      overflow: hidden;
+    }
+    #graphPlot {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+    }
+    #xAxis {
+      position: absolute;
+      left: 0; width: 100%;
+      height: 15%;
+      top: 85%;
+    }
+  </style>
+</head>
+<body>
+  <iframe id="ytPlayer" width="0" height="0" src="https://www.youtube.com/embed/bTJP8RfaCJQ?enablejsapi=1" frameborder="0" allow="autoplay"></iframe>
+  <iframe id="meditationPlayer" width="0" height="0" src="https://www.youtube.com/embed/u3papaX85MA?enablejsapi=1" frameborder="0" allow="autoplay"></iframe>
+
+  <div id="quote" class="quote"></div>
+  <button id="startSession" class="btn start-btn">🚀 Start Study Session</button>
+  <button id="startMeditationMain" class="btn meditation-btn">🧘 5-Minute Meditation</button>
+  <button id="toggleHistory" class="btn stats-btn">📊 Insights</button>
+  <div id="main"></div>
+  <div id="stats" style="margin-top:2rem"></div>
+  <div id="history"></div>
+  <button id="endSession" class="btn end-btn" style="display:none">⏹ End Session</button>
+  <button id="endReview" class="btn end-btn" style="display:none">⏹ End Review</button>
+  <button id="endMeditation" class="btn end-btn" style="display:none">⏹ End Meditation</button>
+  <div id="debug" class="debug"></div>
+
+  <script>
+    // App state
+    let mode = "idle";
+    const DEFAULT_FINDING_TIME = 600; // 10 minutes
+    const DEFAULT_WRITING_TIME = 300; // 5 minutes
+    const MEDITATION_TIME = 300; // 5 minutes
+    const REVIEW_TIME = 600; // 10 minutes
+
+    let mainTimer = DEFAULT_FINDING_TIME;
+    let writeTimer = DEFAULT_WRITING_TIME;
+    let meditationTimer = MEDITATION_TIME;
+    let reviewTimer = REVIEW_TIME;
+    let sessionActive = false;
+    let meditationActive = false;
+    let reviewActive = false;
+    let historyVisible = false;
+    let oneMinuteAlertSpoken = false;
+    let twoMinuteAlertSpoken = false;
+    let threeMinuteAlertSpoken = false;
+    let fiveMinuteAlertSpoken = false;
+    let eightMinuteAlertSpoken = false;
+    let insights = [];
+    let dailyCount = 0;
+    let interval;
+    let meditationInterval;
+    let reviewInterval;
+    let currentDate = "";
+
+    // DOM elements
+    const mainDiv = document.getElementById("main");
+    const statsDiv = document.getElementById("stats");
+    const historyDiv = document.getElementById("history");
+    const quoteDiv = document.getElementById("quote");
+    const startBtn = document.getElementById("startSession");
+    const endBtn = document.getElementById("endSession");
+    const toggleHistoryBtn = document.getElementById("toggleHistory");
+    const meditationMainBtn = document.getElementById("startMeditationMain");
+    const endMeditationBtn = document.getElementById("endMeditation");
+    const endReviewBtn = document.getElementById("endReview");
+    const ytPlayer = document.getElementById("ytPlayer");
+    const meditationPlayer = document.getElementById("meditationPlayer");
+    const debugDiv = document.getElementById("debug");
+
+    // Motivational quotes array
+    const quotes = [
+      "Just do it.",
+      "Motivation is temporary. Just do.",
+      "Control your mind. Don't let your brain control you.",
+      "Your inner voice is your harshest critic. Overcome it.",
+      "Cap success. Don't let comfort make you soft.",
+      "The One Second Decision. Think about regret versus pride.",
+      "Build belief through proof. Not affirmations in the mirror.",
+      "Face the truth. Acknowledge weakness, then improve.",
+      "Do something that sucks every day.",
+      "Chosen suffering prepares you for unchosen suffering.",
+      "Learn to perform without motivation.",
+      "Learn to perform without purpose.",
+      "You are your own greatest purpose.",
+      "Organize your mind. Clear the mental garage nightly.",
+      "Discipline needs a clear head space.",
+      "Outwork your self-doubt.",
+      "The process never ends. Keep evolving.",
+      "It's all stick, no carrot.",
+      "Give yourself no way out.",
+      "Constantly study yourself. Solve your own problems.",
+      "Accumulate undeniable proof of your capabilities.",
+      "Shame, guilt, and regret last longer than discomfort.",
+      "Failure is your first, second, and third attempt.",
+      "Stay hungry, but stay humble.",
+      "Accountability is suffering. Practice it daily.",
+      "Your true self is found in the uncomfortable zone.",
+      "The world is tough. Armor your mind.",
+      "The world will find your weakness and hammer you.",
+      "Don't be ashamed. Face your past, fix it, make it better.",
+      "Be the master of your dream. Execute the task list."
+    ];
+
+    // Display random quote
+    function displayRandomQuote() {
+      const randomIndex = Math.floor(Math.random() * quotes.length);
+      quoteDiv.innerHTML = `<strong>"${quotes[randomIndex]}"</strong>`;
+    }
+
+    // Helper function to log to debug area
+    function debugLog(msg) {
+      console.log(msg);
+      debugDiv.textContent = `${new Date().toLocaleTimeString()}: ${msg}`;
+    }
+
+    // Voice feedback
+    const speak = (text) => {
+      if ('speechSynthesis' in window) {
+        speechSynthesis.cancel();
+        const msg = new SpeechSynthesisUtterance(text);
+        msg.lang = 'en-US';
+        msg.pitch = 1;
+        msg.rate = 0.9;
+        msg.volume = 1;
+        speechSynthesis.speak(msg);
+      }
+    };
+
+    // YouTube player functions
+    function playYouTube() {
+      debugLog("Attempting to play YouTube");
+      try {
+        meditationPlayer.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+        ytPlayer.contentWindow.postMessage('{"event":"command","func":"setVolume","args":[3]}', '*');
+        ytPlayer.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
+      } catch (error) {
+        debugLog("Error playing YouTube: " + error);
+      }
+    }
+
+    function pauseYouTube() {
+      debugLog("Pausing YouTube");
+      try {
+        ytPlayer.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+      } catch (error) {
+        debugLog("Error pausing YouTube: " + error);
+      }
+    }
+
+    function playMeditation() {
+      debugLog("Playing meditation");
+      try {
+        ytPlayer.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+        meditationPlayer.contentWindow.postMessage('{"event":"command","func":"setVolume","args":[50]}', '*');
+        meditationPlayer.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
+      } catch (error) {
+        debugLog("Error playing meditation: " + error);
+      }
+    }
+
+    function pauseMeditation() {
+      debugLog("Pausing meditation");
+      try {
+        meditationPlayer.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+      } catch (error) {
+        debugLog("Error pausing meditation: " + error);
+      }
+    }
+
+    // Use Korea timezone (UTC+9)
+    function getCurrentDate() {
+      const now = new Date();
+      // Add 9 hours for Korea timezone
+      const koreaTime = new Date(now.getTime() + (9 * 60 * 60 * 1000));
+      return koreaTime.toISOString().slice(0, 10);
+    }
+
+    // Reset localStorage for testing (REMOVE THIS IN PRODUCTION)
+    function resetStorage() {
+      localStorage.removeItem("insightHistory");
+      debugLog("Storage reset for testing");
+    }
+
+    // Initialize or get insight history
+    function initInsightHistory() {
+      // Get current date (Korea time)
+      currentDate = getCurrentDate();
+      debugLog(`Initializing for date: ${currentDate}`);
+      
+      // Create or get history object
+      let insightHistory = {};
+      const stored = localStorage.getItem("insightHistory");
+      
+      if (stored) {
+        try {
+          insightHistory = JSON.parse(stored);
+          debugLog("Loaded existing history: " + JSON.stringify(insightHistory));
+        } catch (e) {
+          debugLog("Error parsing history, starting fresh");
+          insightHistory = {};
+        }
+      }
+      
+      // Ensure today exists in history
+      if (!insightHistory[currentDate]) {
+        debugLog(`Creating new entry for ${currentDate}`);
+        insightHistory[currentDate] = 0;
+        localStorage.setItem("insightHistory", JSON.stringify(insightHistory));
+      }
+      
+      // Set daily count to current date's value
+      dailyCount = insightHistory[currentDate];
+      debugLog(`Daily count set to ${dailyCount}`);
+      
+      return insightHistory;
+    }
+
+    // Add a new insight
+    function addInsight() {
+      // Refresh current date
+      currentDate = getCurrentDate();
+      debugLog(`Adding insight for ${currentDate}`);
+      
+      // Get latest history
+      let insightHistory = JSON.parse(localStorage.getItem("insightHistory")) || {};
+      
+      // Increment counts
+      insights.push(`Insight #${insights.length + 1}`);
+      dailyCount = (insightHistory[currentDate] || 0) + 1;
+      insightHistory[currentDate] = dailyCount;
+      
+      // Save back to storage
+      localStorage.setItem("insightHistory", JSON.stringify(insightHistory));
+      debugLog(`Saved insight #${dailyCount} for ${currentDate}`);
+    }
+
+    // Toggle insight history display
+    function toggleHistory() {
+      historyVisible = !historyVisible;
+      
+      if (historyVisible) {
+        const insightHistory = JSON.parse(localStorage.getItem("insightHistory")) || {};
+        const entries = Object.entries(insightHistory).sort();
+        historyDiv.innerHTML = '<canvas id="insightChart" style="width:100%; height:150px;"></canvas>'
+          + '<div style="margin-top:1rem; max-height:200px; overflow-y:auto;">' 
+          + entries.map(([date, count]) => `
+            <div style="display:flex; justify-content:space-between; padding:6px; margin-bottom:3px; 
+                      border-radius:4px; background-color:rgba(15, 23, 42, 0.4);">
+              <span style="font-weight:bold;">${date}</span>
+              <span style="color:var(--writing-color);">${count} insights</span>
+            </div>
+          `).join('') + '</div>';
+
+        toggleHistoryBtn.textContent = "🔍 Close";
+        renderInsightChart();
+        debugLog("Showing responsive history graph");
+      } else {
+        // Hide history
+        historyDiv.innerHTML = "";
+        toggleHistoryBtn.textContent = "📊 Insights";
+        debugLog("Hiding history");
+      }
+    }
+
+    // Render Chart.js graph of insight history
+    function renderInsightChart() {
+      const insightHistory = JSON.parse(localStorage.getItem("insightHistory")) || {};
+      const entries = Object.entries(insightHistory).sort();
+      
+      // Get last 10 days (or all if less than 10)
+      const recentEntries = entries.length > 10 ? entries.slice(-10) : entries;
+      
+      // Convert dates to day names (Mon, Tue, etc.)
+      const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const labels = recentEntries.map(entry => {
+        const dateStr = entry[0]; // YYYY-MM-DD format
+        const date = new Date(dateStr);
+        return dayNames[date.getDay()];
+      });
+      
+      const data = recentEntries.map(entry => entry[1]);
+      
+      // Get chart canvas
+      const ctx = document.getElementById('insightChart').getContext('2d');
+      
+      // Create chart with custom plugin to display point values
+      const pointValuePlugin = {
+        id: 'pointValues',
+        afterDraw: (chart) => {
+          const {ctx, data, chartArea} = chart;
+          
+          // Draw value labels
+          data.datasets.forEach((dataset, datasetIndex) => {
+            const meta = chart.getDatasetMeta(datasetIndex);
+            if (!meta.hidden) {
+              meta.data.forEach((element, index) => {
+                // Position and draw the text
+                const value = dataset.data[index];
+                const x = element.x;
+                const y = element.y - 15; // Place above the point
+                
+                // Draw with bold white text
+                ctx.save();
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 10px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(value, x, y);
+                ctx.restore();
+              });
+            }
+          });
+        }
+      };
+      
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Daily Insights',
+            data: data,
+            borderColor: '#60a5fa',
+            backgroundColor: 'rgba(96,165,250,0.2)',
+            pointBackgroundColor: '#60a5fa',
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            tension: 0.3,
+            fill: true
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          layout: {
+            padding: {
+              top: 25, // Add more padding for point labels
+              right: 10
+            }
+          },
+          backgroundColor: '#0f172a', // Match app background color
+          devicePixelRatio: 2, // Higher resolution
+          scales: {
+            x: {
+              grid: {
+                display: false  // Hide x-axis grid lines
+              },
+              title: {
+                display: false  // Hide x-axis title
+              },
+              ticks: {
+                color: 'rgba(255,255,255,0.7)',
+                font: {
+                  size: 9
+                }
+              }
+            },
+            y: {
+              beginAtZero: true,
+              title: {
+                display: false // Hide y-axis title to save space
+              },
+              grid: {
+                color: 'rgba(255,255,255,0.1)'
+              },
+              ticks: {
+                color: 'rgba(255,255,255,0.7)',
+                font: {
+                  size: 9
+                }
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              display: false
+            },
+            title: {
+              display: false  // Ensure no title is displayed
+            },
+            tooltip: {
+              enabled: true,
+              backgroundColor: 'rgba(15, 23, 42, 0.8)',
+              titleColor: '#fff',
+              bodyColor: '#fff',
+              displayColors: false,
+              callbacks: {
+                title: function(tooltipItems) {
+                  // Get original date from the entry
+                  const index = tooltipItems[0].dataIndex;
+                  const dateStr = recentEntries[index][0];
+                  return 'Date: ' + dateStr + ' (' + tooltipItems[0].label + ')';
+                },
+                label: function(context) {
+                  return 'Insights: ' + context.parsed.y;
+                }
+              }
+            }
+          },
+          animation: {
+            duration: 300
+          },
+          plugins: {
+            pointValues: {}
+          }
+        },
+        plugins: [pointValuePlugin]
+      });
+    }
+    
+    // Reset alert flags
+    function resetAlertFlags() {
+      oneMinuteAlertSpoken = false;
+      twoMinuteAlertSpoken = false;
+      threeMinuteAlertSpoken = false;
+      fiveMinuteAlertSpoken = false;
+      eightMinuteAlertSpoken = false;
+    }
+
+    // Check date periodically
+    function checkDate() {
+      const newDate = getCurrentDate();
+      if (newDate !== currentDate) {
+        debugLog(`Date changed from ${currentDate} to ${newDate}`);
+        currentDate = newDate;
+        initInsightHistory();
+        updateUI();
+      }
+    }
+
+    // Start review session
+    function startReview() {
+      debugLog("Starting review session");
+      reviewActive = true;
+      reviewTimer = REVIEW_TIME;
+      startBtn.style.display = "none";
+      toggleHistoryBtn.style.display = "none";
+      meditationMainBtn.style.display = "none";
+      endReviewBtn.style.display = "inline";
+      
+      // Clear history display
+      historyDiv.innerHTML = "";
+      historyVisible = false;
+      
+      // Start meditation music automatically
+      playMeditation();
+      
+      // Update UI for review
+      mainDiv.innerHTML = "<h2 style='color:var(--review-color)'>📝 Review Session</h2>";
+      statsDiv.innerHTML = "";
+      
+      // Start review timer
+      reviewInterval = setInterval(() => {
+        reviewTimer--;
+        
+        // Update timer display
+        const minutes = Math.floor(reviewTimer / 60);
+        const seconds = String(reviewTimer % 60).padStart(2, '0');
+        mainDiv.innerHTML = `<h2 style='color:var(--review-color)'>📝 Review Session</h2>
+                            <div class='timer'>${minutes}:${seconds}</div>`;
+        
+        // Check if time is up
+        if (reviewTimer <= 0) {
+          clearInterval(reviewInterval);
+          pauseMeditation();
+          resetToMainScreen();
+          speak("Review complete");
+        }
+      }, 1000);
+    }
+
+    // Start meditation
+    function startMeditation() {
+      debugLog("Starting meditation");
+      meditationActive = true;
+      meditationTimer = MEDITATION_TIME;
+      startBtn.style.display = "none";
+      toggleHistoryBtn.style.display = "none";
+      meditationMainBtn.style.display = "none";
+      endMeditationBtn.style.display = "none"; // Hide end meditation button
+      
+      // Clear history display
+      historyDiv.innerHTML = "";
+      historyVisible = false;
+      
+      // Hide quote
+      quoteDiv.innerHTML = "";
+      
+      // Start meditation music
+      playMeditation();
+      
+      // Update UI for meditation - only show meditation in progress message
+      mainDiv.innerHTML = "<h2 style='color:var(--meditation-color)'>🧘 Meditation in Progress</h2>";
+      statsDiv.innerHTML = "";
+      
+      // Still track time internally, but don't display it
+      meditationInterval = setInterval(() => {
+        meditationTimer--;
+        
+        // No timer update here - leave the UI static during meditation
+        
+        // Check if time is up
+        if (meditationTimer <= 0) {
+          clearInterval(meditationInterval);
+          pauseMeditation();
+          resetToMainScreen();
+          speak("Meditation complete");
+        }
+      }, 1000);
+    }
+
+    // Reset UI to main screen
+    function resetToMainScreen() {
+      debugLog("Resetting to main screen");
+      mode = "idle";
+      sessionActive = false;
+      meditationActive = false;
+      reviewActive = false;
+      historyVisible = false;
+      
+      // Clear any active intervals
+      if (interval) clearInterval(interval);
+      if (meditationInterval) clearInterval(meditationInterval);
+      if (reviewInterval) clearInterval(reviewInterval);
+      
+      // Update UI elements
+      mainDiv.innerHTML = "";
+      historyDiv.innerHTML = "";
+      statsDiv.innerHTML = ""; // Ensure stats are cleared too
+      
+      // Show appropriate buttons
+      startBtn.style.display = "inline";
+      toggleHistoryBtn.style.display = "inline";
+      meditationMainBtn.style.display = "inline";
+      toggleHistoryBtn.textContent = "📊 Insights";
+      endBtn.style.display = "none";
+      endMeditationBtn.style.display = "none";
+      endReviewBtn.style.display = "none";
+      
+      // Display random quote
+      displayRandomQuote();
+      
+      // Update stats
+      initInsightHistory();
+      updateUI();
+    }
+
+    // Initialize on load
+    // Uncomment this line to reset storage for testing
+    // resetStorage();
+    
+    // Initialize with current date
+    initInsightHistory();
+    // Display random quote on startup
+    displayRandomQuote();
+    updateUI();
+    
+    // Check date every minute
+    setInterval(checkDate, 60000);
+    
+    // Button event handlers
+    startBtn.addEventListener("click", () => {
+      debugLog("Start button clicked");
+      // Refresh before starting
+      initInsightHistory();
+      
+      // Hide quote
+      quoteDiv.innerHTML = "";
+      
+      resetAlertFlags();
+      sessionActive = true;
+      mode = "finding";
+      mainTimer = DEFAULT_FINDING_TIME;
+      insights = [];
+      startBtn.style.display = "none";
+      endBtn.style.display = "inline";
+      toggleHistoryBtn.style.display = "none";
+      meditationMainBtn.style.display = "none";
+      historyDiv.innerHTML = "";
+      historyVisible = false;
+      speak("Find Your Next Insight!");
+      playYouTube();
+      updateUI();
+      startInterval();
+    });
+
+    endBtn.addEventListener("click", () => {
+      debugLog("End button clicked");
+      sessionActive = false;
+      clearInterval(interval);
+      pauseYouTube();
+      
+      // Show end message briefly
+      mainDiv.innerHTML = "<h2 style='color:#facc15;'>Session Ended 💡</h2>";
+      endBtn.style.display = "none";
+      
+      // Automatically start review session after a short delay
+      setTimeout(() => {
+        speak("Starting review session");
+        startReview();
+      }, 1500);
+    });
+
+    endReviewBtn.addEventListener("click", () => {
+      debugLog("End review button clicked");
+      if (reviewInterval) clearInterval(reviewInterval);
+      pauseMeditation();
+      resetToMainScreen();
+    });
+
+    meditationMainBtn.addEventListener("click", () => {
+      debugLog("Main meditation button clicked");
+      startMeditation();
+    });
+    
+    endMeditationBtn.addEventListener("click", () => {
+      debugLog("End meditation button clicked");
+      if (meditationInterval) clearInterval(meditationInterval);
+      pauseMeditation();
+      resetToMainScreen();
+    });
+
+    toggleHistoryBtn.addEventListener("click", () => {
+      debugLog("Toggle history button clicked");
+      toggleHistory();
+    });
+
+    // Timer functions
+    function startInterval() {
+      debugLog("Starting interval");
+      resetAlertFlags();
+      
+      if (interval) {
+        clearInterval(interval);
+      }
+      
+      interval = setInterval(() => {
+        if (!sessionActive) return;
+
+        if (mode === "finding") {
+          // Finding mode alerts at 8, 5, 2, and 1 minutes
+          if (mainTimer === 480 && !eightMinuteAlertSpoken) {
+            // Get a random quote from the array
+            const randomIndex = Math.floor(Math.random() * quotes.length);
+            const randomQuote = quotes[randomIndex];
+            speak(`Eight minutes left. ${randomQuote}`);
+            eightMinuteAlertSpoken = true;
+          }
+          if (mainTimer === 300 && !fiveMinuteAlertSpoken) {
+            speak("Five minutes left, half way there! Use the brain");
+            fiveMinuteAlertSpoken = true;
+          }
+          if (mainTimer === 120 && !twoMinuteAlertSpoken) {
+            speak("Two minutes left, Did you find an insight?");
+            twoMinuteAlertSpoken = true;
+          }
+          if (mainTimer === 60 && !oneMinuteAlertSpoken) {
+            speak("One minute left, Full power! Use the brain");
+            oneMinuteAlertSpoken = true;
+          }
+          
+          if (mainTimer > 0) {
+            mainTimer--;
+          } else {
+            mode = "writing";
+            writeTimer = DEFAULT_WRITING_TIME;
+            resetAlertFlags();
+            speak("Stop! Write your insight!");
+          }
+        } else if (mode === "writing") {
+          // Writing mode alerts at 3, 2, and 1 minutes
+          if (writeTimer === 180 && !threeMinuteAlertSpoken) {
+            speak("Three minutes left for writing");
+            threeMinuteAlertSpoken = true;
+          }
+          if (writeTimer === 120 && !twoMinuteAlertSpoken) {
+            speak("Two minutes left for writing");
+            twoMinuteAlertSpoken = true;
+          }
+          if (writeTimer === 60 && !oneMinuteAlertSpoken) {
+            speak("One minute left! Full Power! ");
+            oneMinuteAlertSpoken = true;
+          }
+          
+          if (writeTimer > 0) {
+            writeTimer--;
+          } else {
+            nextInsight();
+          }
+        }
+        updateUI();
+      }, 1000);
+    }
+
+    function nextInsight() {
+      debugLog("Next insight");
+      resetAlertFlags();
+      
+      // Add insight with current date
+      addInsight();
+      
+      mode = "finding";
+      mainTimer = DEFAULT_FINDING_TIME;
+      speak("Still writing? Drop it and find your next insight!");
+      updateUI();
+    }
+
+    function updateUI() {
+      if (meditationActive || reviewActive) return;
+      
+      let minutes, seconds;
+      if (mode === "finding") {
+        minutes = Math.floor(mainTimer / 60);
+        seconds = String(mainTimer % 60).padStart(2, '0');
+        mainDiv.innerHTML = `<h1 class='pulse' style='color:var(--alert-color)'>🔥 Find Insight!</h1><div class='timer'>${minutes}:${seconds}</div>`;
+      } else if (mode === "writing") {
+        minutes = Math.floor(writeTimer / 60);
+        seconds = String(writeTimer % 60).padStart(2, '0');
+        mainDiv.innerHTML = `<h1 class='bounce' style='color:var(--writing-color)'>✍️ Write your insight!</h1>
+        <div class='timer'>${minutes}:${seconds}</div>
+        <button class='btn' style='background:#14b8a6' onclick='nextInsight()'>✅ Next Insight</button>`;
+      } else {
+        // Don't clear main div if it contains end session or meditation message
+      }
+      
+      statsDiv.innerHTML = sessionActive ? 
+        `<p>Insights this session: <strong>${insights.length}</strong></p>` : 
+        "";
+    }
+    
+    // Make sure YouTube API is ready
+    window.onYouTubeIframeAPIReady = function() {
+      debugLog("YouTube API Ready");
+    };
+  </script>
+</body>
+</html>
