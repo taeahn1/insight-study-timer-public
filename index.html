@@ -94,6 +94,62 @@
       opacity: 0.8;
       margin-top: 0.25rem;
     }
+    
+    /* Compact Music Selection Styles */
+    .music-selection {
+      margin: 1rem auto;
+      max-width: 500px;
+      text-align: center;
+      padding: 0.75rem;
+      background-color: rgba(30, 41, 59, 0.3);
+      border-radius: 8px;
+    }
+    .music-select {
+      background-color: rgba(30, 41, 59, 0.8);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 6px;
+      padding: 0.4rem 0.8rem;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    .music-select:hover {
+      background-color: rgba(51, 65, 85, 0.9);
+      border-color: var(--accent-color);
+    }
+    .music-select:focus {
+      outline: none;
+      border-color: var(--accent-color);
+      box-shadow: 0 0 5px rgba(74, 222, 128, 0.3);
+    }
+    
+    /* Compact Volume Slider */
+    .volume-slider-compact {
+      width: 100px;
+      height: 4px;
+      border-radius: 2px;
+      background: rgba(255,255,255,0.2);
+      outline: none;
+      -webkit-appearance: none;
+    }
+    .volume-slider-compact::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent-color);
+      cursor: pointer;
+    }
+    .volume-slider-compact::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent-color);
+      cursor: pointer;
+      border: none;
+    }
     /* Responsive graph container */
     #graphContainer {
       width: 100%;
@@ -120,8 +176,13 @@
   </style>
 </head>
 <body>
-  <iframe id="ytPlayer" width="0" height="0" src="https://www.youtube.com/embed/bTJP8RfaCJQ?enablejsapi=1" frameborder="0" allow="autoplay"></iframe>
-  <iframe id="meditationPlayer" width="0" height="0" src="https://www.youtube.com/embed/u3papaX85MA?enablejsapi=1" frameborder="0" allow="autoplay"></iframe>
+  <iframe id="ytPlayer" width="0" height="0" src="https://www.youtube.com/embed/bTJP8RfaCJQ?enablejsapi=1&loop=1&playlist=bTJP8RfaCJQ" frameborder="0" allow="autoplay"></iframe>
+  <iframe id="meditationPlayer" width="0" height="0" src="https://www.youtube.com/embed/u3papaX85MA?enablejsapi=1&loop=1&playlist=u3papaX85MA" frameborder="0" allow="autoplay"></iframe>
+  <iframe id="fireplacePlayer" width="0" height="0" src="https://www.youtube.com/embed/5ss2qOtJf4U?enablejsapi=1&loop=1&playlist=5ss2qOtJf4U" frameborder="0" allow="autoplay"></iframe>
+  <iframe id="classicalPlayer" width="0" height="0" src="https://www.youtube.com/embed/QL1aEdjAvF8?enablejsapi=1&loop=1&playlist=QL1aEdjAvF8" frameborder="0" allow="autoplay"></iframe>
+  <iframe id="gammaPlayer" width="0" height="0" src="https://www.youtube.com/embed/lkkGlVWvkLk?enablejsapi=1&loop=1&playlist=lkkGlVWvkLk" frameborder="0" allow="autoplay"></iframe>
+  <iframe id="binauralPlayer" width="0" height="0" src="https://www.youtube.com/embed/1_G60OdEzXs?enablejsapi=1&loop=1&playlist=1_G60OdEzXs" frameborder="0" allow="autoplay"></iframe>
+  <iframe id="adhdPlayer" width="0" height="0" src="https://www.youtube.com/embed/RG2IK8oRZNA?enablejsapi=1&start=9010&loop=1&playlist=RG2IK8oRZNA" frameborder="0" allow="autoplay"></iframe>
 
   <div id="quote" class="quote"></div>
   <button id="startSession" class="btn start-btn">🚀 Start Study Session</button>
@@ -130,6 +191,26 @@
   <div id="main"></div>
   <div id="stats" style="margin-top:2rem"></div>
   <div id="history"></div>
+  
+  <!-- Music Selection (moved to bottom) -->
+  <div id="musicSelection" class="music-selection">
+    <div style="display: flex; align-items: center; justify-content: center; gap: 1rem; margin-bottom: 0.5rem;">
+      <span style="color: #94a3b8; font-size: 0.85rem;">🎵 Music:</span>
+      <select id="musicSelect" class="music-select">
+        <option value="whitenoise">🌊 White Noise</option>
+        <option value="meditation">🧘 Meditation</option>
+        <option value="fireplace">🔥 Fireplace</option>
+        <option value="classical">🎼 Classical</option>
+        <option value="gamma">🧠 Gamma Waves</option>
+        <option value="binaural">🎧 Binaural Beats</option>
+        <option value="adhd">💆 ADHD Relief</option>
+      </select>
+      <span style="color: #94a3b8; font-size: 0.85rem;">🔊</span>
+      <input type="range" id="volumeSlider" min="0" max="100" value="50" class="volume-slider-compact">
+      <span id="volumeValue" style="color: #94a3b8; font-size: 0.85rem; min-width: 35px;">50%</span>
+    </div>
+  </div>
+  
   <button id="endSession" class="btn end-btn" style="display:none">⏹ End Session</button>
   <button id="endReview" class="btn end-btn" style="display:none">⏹ End Review</button>
   <button id="endMeditation" class="btn end-btn" style="display:none">⏹ End Meditation</button>
@@ -142,6 +223,20 @@
     const DEFAULT_WRITING_TIME = 300; // 5 minutes
     const MEDITATION_TIME = 300; // 5 minutes
     const REVIEW_TIME = 600; // 10 minutes
+    
+    // Music configuration
+    let selectedMusic = localStorage.getItem('selectedMusic') || 'whitenoise';
+    let musicVolume = parseInt(localStorage.getItem('musicVolume')) || 50;
+    
+    const musicPlayers = {
+      'whitenoise': 'ytPlayer',
+      'meditation': 'meditationPlayer',
+      'fireplace': 'fireplacePlayer',
+      'classical': 'classicalPlayer',
+      'gamma': 'gammaPlayer',
+      'binaural': 'binauralPlayer',
+      'adhd': 'adhdPlayer'
+    }
 
     let mainTimer = DEFAULT_FINDING_TIME;
     let writeTimer = DEFAULT_WRITING_TIME;
@@ -176,46 +271,63 @@
     const endReviewBtn = document.getElementById("endReview");
     const ytPlayer = document.getElementById("ytPlayer");
     const meditationPlayer = document.getElementById("meditationPlayer");
+    const fireplacePlayer = document.getElementById("fireplacePlayer");
+    const classicalPlayer = document.getElementById("classicalPlayer");
+    const gammaPlayer = document.getElementById("gammaPlayer");
+    const binauralPlayer = document.getElementById("binauralPlayer");
+    const adhdPlayer = document.getElementById("adhdPlayer");
+    const musicSelectionDiv = document.getElementById("musicSelection");
+    const musicSelect = document.getElementById("musicSelect");
+    const volumeSlider = document.getElementById("volumeSlider");
+    const volumeValue = document.getElementById("volumeValue");
     const debugDiv = document.getElementById("debug");
 
     // Motivational quotes array
     const quotes = [
-      "Just do it.",
-      "Motivation is temporary. Just do.",
-      "Control your mind. Don't let your brain control you.",
-      "Your inner voice is your harshest critic. Overcome it.",
-      "Cap success. Don't let comfort make you soft.",
-      "The One Second Decision. Think about regret versus pride.",
-      "Build belief through proof. Not affirmations in the mirror.",
-      "Face the truth. Acknowledge weakness, then improve.",
-      "Do something that sucks every day.",
-      "Chosen suffering prepares you for unchosen suffering.",
-      "Learn to perform without motivation.",
-      "Learn to perform without purpose.",
-      "You are your own greatest purpose.",
-      "Organize your mind. Clear the mental garage nightly.",
-      "Discipline needs a clear head space.",
-      "Outwork your self-doubt.",
-      "The process never ends. Keep evolving.",
-      "It's all stick, no carrot.",
-      "Give yourself no way out.",
-      "Constantly study yourself. Solve your own problems.",
-      "Accumulate undeniable proof of your capabilities.",
-      "Shame, guilt, and regret last longer than discomfort.",
-      "Failure is your first, second, and third attempt.",
-      "Stay hungry, but stay humble.",
-      "Accountability is suffering. Practice it daily.",
-      "Your true self is found in the uncomfortable zone.",
-      "The world is tough. Armor your mind.",
-      "The world will find your weakness and hammer you.",
-      "Don't be ashamed. Face your past, fix it, make it better.",
-      "Be the master of your dream. Execute the task list."
+      "The consistency is the most important thing.",
+      "The small details is what makes the huge difference at the end of the day.",
+      "You don't need a rival to push you harder."
     ];
 
     // Display random quote
     function displayRandomQuote() {
       const randomIndex = Math.floor(Math.random() * quotes.length);
       quoteDiv.innerHTML = `<strong>"${quotes[randomIndex]}"</strong>`;
+    }
+    
+    // Initialize music selection
+    function initMusicSelection() {
+      // Set initial selected option
+      musicSelect.value = selectedMusic;
+      
+      // Set volume slider
+      volumeSlider.value = musicVolume;
+      volumeValue.textContent = musicVolume + '%';
+      
+      // Add event listener to music select
+      musicSelect.addEventListener('change', (e) => {
+        selectedMusic = e.target.value;
+        localStorage.setItem('selectedMusic', selectedMusic);
+        debugLog("Selected music: " + selectedMusic);
+      });
+      
+      // Add volume slider listener
+      volumeSlider.addEventListener('input', (e) => {
+        musicVolume = parseInt(e.target.value);
+        volumeValue.textContent = musicVolume + '%';
+        localStorage.setItem('musicVolume', musicVolume);
+        
+        // Update volume in real-time if music is playing
+        if (sessionActive && selectedMusic !== 'whitenoise') {
+          const playerId = musicPlayers[selectedMusic];
+          const player = document.getElementById(playerId);
+          try {
+            player.contentWindow.postMessage(`{"event":"command","func":"setVolume","args":[${musicVolume}]}`, '*');
+          } catch (error) {
+            debugLog("Error updating volume: " + error);
+          }
+        }
+      });
     }
 
     // Helper function to log to debug area
@@ -237,25 +349,46 @@
       }
     };
 
-    // YouTube player functions
-    function playYouTube() {
-      debugLog("Attempting to play YouTube");
+    // Music player functions
+    function pauseAllMusic() {
+      Object.values(musicPlayers).forEach(playerId => {
+        try {
+          document.getElementById(playerId).contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+        } catch (error) {
+          debugLog("Error pausing " + playerId + ": " + error);
+        }
+      });
+    }
+    
+    function playStudyMusic() {
+      debugLog("Playing study music: " + selectedMusic);
+      pauseAllMusic();
+      
+      const playerId = musicPlayers[selectedMusic];
+      const player = document.getElementById(playerId);
+      
       try {
-        meditationPlayer.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
-        ytPlayer.contentWindow.postMessage('{"event":"command","func":"setVolume","args":[3]}', '*');
-        ytPlayer.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
+        // Set volume based on music type
+        const volume = selectedMusic === 'whitenoise' ? 3 : musicVolume;
+        player.contentWindow.postMessage(`{"event":"command","func":"setVolume","args":[${volume}]}`, '*');
+        player.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
       } catch (error) {
-        debugLog("Error playing YouTube: " + error);
+        debugLog("Error playing music: " + error);
       }
     }
-
+    
+    function pauseStudyMusic() {
+      debugLog("Pausing study music");
+      pauseAllMusic();
+    }
+    
+    // Old functions for compatibility
+    function playYouTube() {
+      playStudyMusic();
+    }
+    
     function pauseYouTube() {
-      debugLog("Pausing YouTube");
-      try {
-        ytPlayer.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
-      } catch (error) {
-        debugLog("Error pausing YouTube: " + error);
-      }
+      pauseStudyMusic();
     }
 
     function playMeditation() {
@@ -546,6 +679,7 @@
       startBtn.style.display = "none";
       toggleHistoryBtn.style.display = "none";
       meditationMainBtn.style.display = "none";
+      musicSelectionDiv.style.display = "none";
       endReviewBtn.style.display = "inline";
       
       // Clear history display
@@ -587,6 +721,7 @@
       startBtn.style.display = "none";
       toggleHistoryBtn.style.display = "none";
       meditationMainBtn.style.display = "none";
+      musicSelectionDiv.style.display = "none";
       endMeditationBtn.style.display = "none"; // Hide end meditation button
       
       // Clear history display
@@ -614,7 +749,6 @@
           clearInterval(meditationInterval);
           pauseMeditation();
           resetToMainScreen();
-          speak("Meditation complete");
         }
       }, 1000);
     }
@@ -642,6 +776,7 @@
       startBtn.style.display = "inline";
       toggleHistoryBtn.style.display = "inline";
       meditationMainBtn.style.display = "inline";
+      musicSelectionDiv.style.display = "block";
       toggleHistoryBtn.textContent = "📊 Insights";
       endBtn.style.display = "none";
       endMeditationBtn.style.display = "none";
@@ -661,6 +796,8 @@
     
     // Initialize with current date
     initInsightHistory();
+    // Initialize music selection
+    initMusicSelection();
     // Display random quote on startup
     displayRandomQuote();
     updateUI();
@@ -686,10 +823,11 @@
       endBtn.style.display = "inline";
       toggleHistoryBtn.style.display = "none";
       meditationMainBtn.style.display = "none";
+      musicSelectionDiv.style.display = "none";
       historyDiv.innerHTML = "";
       historyVisible = false;
       speak("Find Your Next Insight!");
-      playYouTube();
+      playStudyMusic();
       updateUI();
       startInterval();
     });
@@ -698,7 +836,7 @@
       debugLog("End button clicked");
       sessionActive = false;
       clearInterval(interval);
-      pauseYouTube();
+      pauseStudyMusic();
       
       // Show end message briefly
       mainDiv.innerHTML = "<h2 style='color:#facc15;'>Session Ended 💡</h2>";
@@ -753,19 +891,19 @@
             // Get a random quote from the array
             const randomIndex = Math.floor(Math.random() * quotes.length);
             const randomQuote = quotes[randomIndex];
-            speak(`Eight minutes left. ${randomQuote}`);
+            speak(`Eight minutes left.`);
             eightMinuteAlertSpoken = true;
           }
           if (mainTimer === 300 && !fiveMinuteAlertSpoken) {
-            speak("Five minutes left, half way there! Use the brain");
+            speak("Five minutes left");
             fiveMinuteAlertSpoken = true;
           }
           if (mainTimer === 120 && !twoMinuteAlertSpoken) {
-            speak("Two minutes left, Did you find an insight?");
+            speak("Two minutes left");
             twoMinuteAlertSpoken = true;
           }
           if (mainTimer === 60 && !oneMinuteAlertSpoken) {
-            speak("One minute left, Full power! Use the brain");
+            speak("One minute left, Full power!");
             oneMinuteAlertSpoken = true;
           }
           
@@ -775,7 +913,7 @@
             mode = "writing";
             writeTimer = DEFAULT_WRITING_TIME;
             resetAlertFlags();
-            speak("Stop! Write your insight!");
+            speak("Write your insight!");
           }
         } else if (mode === "writing") {
           // Writing mode alerts at 3, 2, and 1 minutes
@@ -784,11 +922,11 @@
             threeMinuteAlertSpoken = true;
           }
           if (writeTimer === 120 && !twoMinuteAlertSpoken) {
-            speak("Two minutes left for writing");
+            speak("Two minutes left");
             twoMinuteAlertSpoken = true;
           }
           if (writeTimer === 60 && !oneMinuteAlertSpoken) {
-            speak("One minute left! Full Power! ");
+            speak("One minute left");
             oneMinuteAlertSpoken = true;
           }
           
